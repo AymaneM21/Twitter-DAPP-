@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mini Twitter</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.5.2/dist/web3.min.js"></script>
+</head>
+<style>
+	/* Reset and body styles */
+	* {
+		box-sizing: border-box;
+		margin: 0;
+		padding: 0;
+		font-family: Arial, sans-serif;
+	}
+	body {
+		background-color: #f5f8fa;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 20px;
+	}
+	h1, h2 {
+		color: #1DA1F2;
+	}
+
+	/* Container and button styles */
+	.container {
+		max-width: 600px;
+		width: 100%;
+		background: white;
+		border: 1px solid #e1e8ed;
+		border-radius: 8px;
+		padding: 20px;
+		margin-top: 20px;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+	}
+	button {
+		background-color: #1DA1F2;
+		color: white;
+		border: none;
+		border-radius: 20px;
+		padding: 10px 20px;
+		cursor: pointer;
+		font-size: 14px;
+		transition: background-color 0.3s;
+	}
+	button:hover {
+		background-color: #0a8cd2;
+	}
+	input[type="text"] {
+		width: calc(100% - 24px);
+		padding: 10px;
+		border-radius: 20px;
+		border: 1px solid #ccd6dd;
+		margin-top: 8px;
+		font-size: 14px;
+	}
+
+	/* Feed styles */
+	#feed {
+		margin-top: 20px;
+	}
+	.post {
+		border-top: 1px solid #e1e8ed;
+		padding: 15px 0;
+		display: flex;
+		flex-direction: column;
+	}
+	.post:first-child {
+		border-top: none;
+	}
+	.post p {
+		color: #657786;
+		margin: 4px 0;
+	}
+	.post-actions {
+		display: flex;
+		gap: 10px;
+		margin-top: 10px;
+	}
+	.post-actions button {
+		background-color: #e1e8ed;
+		color: #1da1f2;
+		font-weight: bold;
+	}
+	.post-actions button:hover {
+		background-color: #cfd9de;
+	}
+	.author {
+		font-weight: bold;
+		color: #14171A;
+	}
+	.post-date {
+		font-size: 12px;
+		color: #657786;
+	}
+	.post-button { margin-top: 5px; padding: 5px 10px 5px 5px; }
+</style>
+<body>
+    <h1>Mini Twitter</h1>
+    <button onclick="connectWallet()">Se connecter au Wallet</button>
+    <select id="accountSelector" onchange="switchAccount()" style="margin: 10px; display: none;">
+        <option value="">Select Account</option>
+    </select>
+    <div id="accountInfo"></div>
+
+    <div class="container">
+        <h2>Ajouter un Post</h2>
+        <input type="text" id="postMessage" placeholder="Votre message">
+        <button class="post-button" onclick="publishPost()">Publier</button>
+    </div>
+
+    <div class="container">
+        <h2>Fil d'actualité</h2>
+        <div id="feed"></div>
+    </div>
+
+    <script>
+        let web3;
+		let account;
+        let accounts = [];
+        const contractAddress = "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82"; 
+        const contractABI = [
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "dislikePost",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "likePost",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			},
+			{
+				"internalType": "string",
+				"name": "_newMessage",
+				"type": "string"
+			}
+		],
+		"name": "modifyPost",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "_message",
+				"type": "string"
+			}
+		],
+		"name": "publishPost",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "removeDislike",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "removeLike",
+		"outputs": [],
+		"stateMutability": "nonpayable",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "index",
+				"type": "uint256"
+			}
+		],
+		"name": "getPost",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			},
+			{
+				"internalType": "address",
+				"name": "",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [],
+		"name": "getTotalPosts",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"name": "posts",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "message",
+				"type": "string"
+			},
+			{
+				"internalType": "address",
+				"name": "author",
+				"type": "address"
+			},
+			{
+				"internalType": "uint256",
+				"name": "likes",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "dislikes",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "createdAt",
+				"type": "uint256"
+			},
+			{
+				"internalType": "uint256",
+				"name": "modifiedAt",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	}
+];
+
+        let miniSocial;
+
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    web3 = new Web3(window.ethereum);
+                    account = accounts[0];
+                    miniSocial = new web3.eth.Contract(contractABI, contractAddress);
+
+                    // Populate the dropdown with available accounts
+                    const accountSelector = document.getElementById("accountSelector");
+                    accountSelector.style.display = "block";
+                    accountSelector.innerHTML = accounts.map(acc => `<option value="${acc}">${acc}</option>`).join('');
+                    accountSelector.value = account;
+
+                    document.getElementById("accountInfo").textContent = `Compte connecté : ${account}`;
+                    loadFeed();
+                } catch (error) {
+                    console.error("Erreur lors de la connexion : ", error);
+                }
+            } else {
+                alert("Veuillez installer MetaMask!");
+            }
+        }
+        function switchAccount() {
+            const selectedAccount = document.getElementById("accountSelector").value;
+            if (selectedAccount && selectedAccount !== account) {
+                account = selectedAccount;
+                document.getElementById("accountInfo").textContent = `Compte connecté : ${account}`;
+                loadFeed();
+            }
+        }
+        async function publishPost() {
+            const message = document.getElementById('postMessage').value;
+            if (message) {
+                await miniSocial.methods.publishPost(message).send({ from: account });
+                alert("Post publié!");
+                loadFeed();
+            } else {
+                alert("Veuillez saisir un message.");
+            }
+        }
+
+        async function loadFeed() {
+            const feed = document.getElementById('feed');
+            feed.innerHTML = '';
+            const totalPosts = await miniSocial.methods.getTotalPosts().call();
+            
+            for (let i = 0; i < totalPosts; i++) {
+                const post = await miniSocial.methods.getPost(i).call();
+                const isAuthor = (post[1].toLowerCase() === account.toLowerCase());
+
+				feed.innerHTML += `
+    <div class="post" >
+        <p>Message: ${post[0]}</p>
+        <p>Auteur: ${post[1]}</p>
+        <p>Likes: ${post[2]}, Dislikes: ${post[3]}</p>
+        <p>Date de création: ${new Date(post[4] * 1000).toLocaleString()}</p>
+        ${post[5] > 0 ? `<p>Date de modification: ${new Date(post[5] * 1000).toLocaleString()}</p>` : ''}
+        <button class="post-button" onclick="likePost(${i})">Like</button>
+        <button class="post-button"  onclick="removeLike(${i})">Remove Like</button>
+        <button class="post-button" onclick="dislikePost(${i})">Dislike</button>
+        <button class="post-button" onclick="removeDislike(${i})">Remove Dislike</button>
+        ${isAuthor ? `<button class="post-button" onclick="modifyPost(${i})">Modifier</button>` : ''}
+        <hr>
+    </div>
+`;
+            }
+        }
+
+        async function likePost(index) {
+            try {
+                await miniSocial.methods.likePost(index).send({ from: account });
+                loadFeed();
+            } catch (error) {
+                alert("Erreur: " + error.message);
+            }
+        }
+
+        async function removeLike(index) {
+            try {
+                await miniSocial.methods.removeLike(index).send({ from: account });
+                loadFeed();
+            } catch (error) {
+                alert("Erreur: " + error.message);
+            }
+        }
+
+        async function dislikePost(index) {
+            try {
+                await miniSocial.methods.dislikePost(index).send({ from: account });
+                loadFeed();
+            } catch (error) {
+                alert("Erreur: " + error.message);
+            }
+        }
+
+        async function removeDislike(index) {
+            try {
+                await miniSocial.methods.removeDislike(index).send({ from: account });
+                loadFeed();
+            } catch (error) {
+                alert("Erreur: " + error.message);
+            }
+        }
+
+        async function modifyPost(index) {
+            const newMessage = prompt("Modifier votre message :");
+            if (newMessage) {
+                await miniSocial.methods.modifyPost(index, newMessage).send({ from: account });
+                loadFeed();
+            }
+        }
+    </script>
+</body>
+</html>
